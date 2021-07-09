@@ -1,84 +1,100 @@
-const express = require('express')
+const express = require('express');
 const router = express.Router();
-const gravatar = require('gravatar')
-const bcrypt = require('bcryptjs')
-const jwt = require('jsonwebtoken')
-const config = require('config')
-const { check, validationResult } = require('express-validator')
+const gravatar = require('gravatar');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const config = require('config');
+const { check, validationResult } = require('express-validator');
+const nodemailer = require('nodemailer');
+const crypto = require('crypto');
 
-const User = require('../../models/User')
+const User = require('../../models/User');
+const Token = require('../../models/Token');
 
 /**
  * @route 	POST api/users
  * @desc 	Register user
  * @access 	Public
  */
-router.post('/', 
-	[
-		check('name', 'Name is required').not().isEmpty(),
-		check('email', 'Please include a valid email').isEmail(),
-		check('password', 'Please enter a password with 6 or more characters')
-		.isLength({ min: 6 })
-	],
-	async (req, res) => {
-	const errors = validationResult(req)
+router.post(
+  '/',
+  [
+    check('name', 'Name is required').not().isEmpty(),
+    check('email', 'Please include a valid email').isEmail(),
+    check(
+      'password',
+      'Please enter a password with 6 or more characters'
+    ).isLength({ min: 6 }),
+  ],
+  async (req, res) => {
+    const errors = validationResult(req);
 
-	if(!errors.isEmpty()){
-		return res.status(400).json({ errors: errors.array() })
-	}
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
 
-	const { name, email, password } = req.body;
+    const { name, email, password } = req.body;
 
-	try {
-		// See if user exists
-		let user = await User.findOne({ email })
+    try {
+      // See if user exists
+      let user = await User.findOne({ email });
 
-		if(user) {
-			return res.status(400).json({ errors: [{ msg: 'User already exists'}] })
-		}
-		// Gets user gravatar
-		const avatar = gravatar.url(email, {
-			s: '200', // size
-			r: 'pg', // rating
-			d: 'mm' // default
-		})
+      if (user) {
+        return res
+          .status(400)
+          .json({ errors: [{ msg: 'User already exists' }] });
+      }
+      // Gets user gravatar
+      const avatar = gravatar.url(email, {
+        s: '200', // size
+        r: 'pg', // rating
+        d: 'mm', // default
+      });
 
-		// Set new instance of our new user
-		user = new User({
-			name,
-			email,
-			avatar,
-			password
-		})
+      // Set new instance of our new user
+      user = new User({
+        name,
+        email,
+        avatar,
+        password,
+      });
 
-		// Encrypt password
-		const salt = await bcrypt.genSalt(10) // 10 is the number of rounds for hashing
+      // Encrypt password
+      const salt = await bcrypt.genSalt(10); // 10 is the number of rounds for hashing
 
-		user.password = await bcrypt.hash(password, salt)
+      user.password = await bcrypt.hash(password, salt);
 
-		await user.save()
-		
-		// Return jsonwebtoken
-		const payload = {
-			user: {
-				id: user.id
-			}
-		}
-		
-		jwt.sign(
-			payload,
-			config.get('jwtSecret'),
-			{ expiresIn: 360000 },
-			(err, token) => {
-				if (err) throw err
-				res.json({ token })
-			}
-		)
+      await user.save();
 
-	} catch(err) {
-		console.error(err.message);
-		res.status(500).send('Server Error')
-	}
-})
+      //   const token = new Token({
+      //     _userId: user._id,
+      //     token: crypto.randomBytes(16).toString('hex'),
+      //   });
 
-module.exports = router
+      //   console.log(token);
+      //   await token.save();
+
+      // Return jsonwebtoken
+      const payload = {
+        user: {
+          id: user.id,
+        },
+      };
+
+      jwt.sign(
+        payload,
+        config.get('jwtSecret'),
+        { expiresIn: 360000 },
+        (err, token) => {
+          if (err) throw err;
+          res.json({ token });
+        }
+      );
+    } catch (err) {
+      console.error(err.message);
+      res.status(500).send('Server Error');
+    }
+  }
+);
+
+module.exports = router;
